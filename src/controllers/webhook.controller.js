@@ -1,7 +1,7 @@
 import WhatsAppMessage from "../models/whatsappMessage.model.js";
 import Purchase from "../models/purchase.model.js";
-import Product from "../models/product.model.js";
-import { addDays } from "../utils/helper.js";
+import User from "../models/user.model.js";
+import { sendTemplateMessage } from "../services/whatsapp.service.js";
 
 export const handleWhatsAppWebhook = async (req, res) => {
     try {
@@ -12,66 +12,132 @@ export const handleWhatsAppWebhook = async (req, res) => {
         if (!message) return res.sendStatus(200);
 
         const phone = message.from;
-        const text = message.text?.body?.toLowerCase() || "";
+        let text = "";
+
+        // Text reply
+        if (message.type === "text") {
+            text = message.text.body.trim().toLowerCase();
+        }
+
+        // Button reply (TEMPLATE BUTTON)
+        else if (message.type === "button") {
+            text = message.button.payload.trim().toLowerCase();
+        }
 
         console.log("📩 WhatsApp reply:", phone, text);
 
-        // 1️⃣ Find last reminder we sent to this number
-        const lastSent = await WhatsAppMessage.findOne({
-            phone,
-            direction: "outgoing"
-        }).sort({ timestamp: -1 });
+        const purchase = await Purchase.findOne({ phone, status: "active" });
+        if (!purchase) return res.sendStatus(200);
 
-        if (!lastSent) return res.sendStatus(200);
+        const user = await User.findById(purchase.userId);
+        if (!user) return res.sendStatus(200);
 
-        // 2️⃣ Detect response type
-        let responseType = "issue";
-        if (text.includes("yes")) responseType = "yes";
-        else if (text.includes("no")) responseType = "no";
-        else if (text.includes("busy")) responseType = "busy";
+        const currentStep = purchase.monthlyFlowStep;
 
-        // 3️⃣ Save incoming message
+        // ================================
+        // REMARK (anything except yes/no)
+        // ================================
+        if (!["yes", "no"].includes(text)) {
+            await WhatsAppMessage.create({
+                userId: user._id,
+                purchaseId: purchase._id,
+                serviceType: currentStep,
+                phone,
+                direction: "incoming",
+                text,
+                responseType: "issue",
+                remark: text,
+                timestamp: new Date()
+            });
+
+            console.log(`📝 Remark saved for ${phone}: ${text}`);
+            return res.sendStatus(200);
+        }
+
+        // ================================
+        // YES / NO reply logging
+        // ================================
         await WhatsAppMessage.create({
-            userId: lastSent.userId,
-            purchaseId: lastSent.purchaseId,
-            serviceType: lastSent.serviceType,
+            userId: user._id,
+            purchaseId: purchase._id,
+            serviceType: currentStep,
             phone,
             direction: "incoming",
             text,
-            responseType,
-            remark: responseType === "issue" ? text : "",
+            responseType: text,
             timestamp: new Date()
         });
 
-        // 4️⃣ If YES → update schedule
-        if (responseType === "yes") {
-            const purchase = await Purchase.findById(lastSent.purchaseId);
-            const product = await Product.findById(purchase.productId);
-
-            const today = new Date();
-
-            if (lastSent.serviceType === "e_cleaning") {
-                purchase.lastECleaning = today;
-                purchase.nextECleaning = addDays(today, product.eCleaningDays);
-            }
-
-            if (lastSent.serviceType === "filter") {
-                purchase.lastFilterCheck = today;
-                purchase.nextFilterCheck = addDays(today, product.filterDays);
-            }
-
-            if (lastSent.serviceType === "deep_clean") {
-                purchase.lastDeepCleaning = today;
-                purchase.nextDeepCleaning = addDays(today, product.deepCleanDays);
-            }
-
-            await purchase.save();
-            console.log(`✅ Updated ${lastSent.serviceType} for ${phone}`);
+        // NO → do nothing
+        if (text === "no") {
+            console.log(`⏸ ${currentStep} not done for ${phone}`);
+            return res.sendStatus(200);
         }
 
-        res.sendStatus(200);
+        // ================================
+        // YES → move to next step
+        // ================================
+        const now = new Date();
+
+        if (currentStep === "e_cleaning") {
+            purchase.lastECleaning = now;
+            purchase.monthlyFlowStep = "filter";
+
+            await WhatsAppMessage.create({
+                userId: user._id,
+                purchaseId: purchase._id,
+                serviceType: "filter",
+                phone,
+                templateName: "ro_filter_monthly_test",
+                direction: "outgoing",
+                text: "Filter reminder sent",
+                timestamp: new Date()
+            });
+
+            await sendTemplateMessage(
+                user.phoneNumberId,
+                user.whatsappAccessToken,
+                phone,
+                "ro_filter_monthly_test",
+                [purchase.customerName]
+            );
+        }
+
+        else if (currentStep === "filter") {
+            purchase.lastFilterCheck = now;
+            purchase.monthlyFlowStep = "deep_clean";
+
+            await WhatsAppMessage.create({
+                userId: user._id,
+                purchaseId: purchase._id,
+                serviceType: "deep_clean",
+                phone,
+                templateName: "ro_deepclean_monthly_test",
+                direction: "outgoing",
+                text: "Deep clean reminder sent",
+                timestamp: new Date()
+            });
+
+            await sendTemplateMessage(
+                user.phoneNumberId,
+                user.whatsappAccessToken,
+                phone,
+                "ro_deepclean_monthly_test",
+                [purchase.customerName]
+            );
+        }
+
+        else if (currentStep === "deep_clean") {
+            purchase.lastDeepCleaning = now;
+            purchase.monthlyFlowStep = "done";
+            console.log(`✅ Monthly service completed for ${phone}`);
+        }
+
+        await purchase.save();
+        return res.sendStatus(200);
+
     } catch (error) {
         console.error("Webhook Error:", error);
-        res.sendStatus(200);
+        return res.sendStatus(200);
     }
 };

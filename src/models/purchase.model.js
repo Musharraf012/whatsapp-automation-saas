@@ -33,12 +33,12 @@ const purchaseSchema = new mongoose.Schema(
             required: true
         },
 
-        // Last service dates
+        // Last service dates (for history & reporting)
         lastECleaning: Date,
         lastFilterCheck: Date,
         lastDeepCleaning: Date,
 
-        // Next scheduled WhatsApp reminder dates
+        // Old reminder system (kept for compatibility)
         nextECleaning: Date,
         nextFilterCheck: Date,
         nextDeepCleaning: Date,
@@ -47,11 +47,28 @@ const purchaseSchema = new mongoose.Schema(
             type: String,
             enum: ["active", "inactive"],
             default: "active"
+        },
+
+        // ===============================
+        // MONTHLY GUIDED SERVICE FLOW
+        // ===============================
+
+        // Which service we are waiting for in the current month
+        monthlyFlowStep: {
+            type: String,
+            enum: ["e_cleaning", "filter", "deep_clean", "done"],
+            default: "e_cleaning"
+        },
+
+        // Which month the flow was last triggered (YYYY-MM)
+        lastFlowMonth: {
+            type: String
         }
     },
     { timestamps: true }
 );
 
+// Pagination support
 purchaseSchema.plugin(mongooseAggregatePaginate);
 
 export default mongoose.model("Purchase", purchaseSchema);

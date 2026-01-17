@@ -34,6 +34,7 @@ import webhookRoutes from "./routes/webhook.route.js";
 import userRoutes from "./routes/user.routes.js";
 import productRoutes from "./routes/product.routes.js";
 import purchaseRoutes from "./routes/purchase.routes.js";
+import path from "path"
 
 import errorHandler from "./middlewares/error.middleware.js";
 
@@ -73,6 +74,10 @@ app.get("/", (req, res) => {
     res.send("WhatsApp Automation SaaS is running 🚀");
 });
 
+app.use(
+    "/guides",
+    express.static(path.join(process.cwd(), "guides"))
+);
 /**
  * Global Error Handler (MUST be last)
  */

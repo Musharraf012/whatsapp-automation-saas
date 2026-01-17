@@ -1,8 +1,22 @@
 import axios from "axios";
-import { WHATSAPP_CONFIG } from "../config/whatsapp.js";
 
-export const sendTemplateMessage = async (to, templateName, variables = []) => {
-    const url = `https://graph.facebook.com/v22.0/${WHATSAPP_CONFIG.phoneNumberId}/messages`;
+/**
+ * Sends a WhatsApp template message.
+ * Supports:
+ *  - Per-user WhatsApp (phoneNumberId + accessToken)
+ *  - Fallback to .env values for single-account mode
+ */
+export const sendTemplateMessage = async (
+    phoneNumberId,
+    accessToken,
+    to,
+    templateName,
+    variables = []
+) => {
+    const finalPhoneId = phoneNumberId || process.env.META_WA_PHONE_NUMBER_ID;
+    const finalToken = accessToken || process.env.META_WA_ACCESS_TOKEN;
+
+    const url = `https://graph.facebook.com/v22.0/${finalPhoneId}/messages`;
 
     const components = [];
 
@@ -29,7 +43,7 @@ export const sendTemplateMessage = async (to, templateName, variables = []) => {
 
     return axios.post(url, data, {
         headers: {
-            Authorization: `Bearer ${WHATSAPP_CONFIG.accessToken}`,
+            Authorization: `Bearer ${finalToken}`,
             "Content-Type": "application/json"
         }
     });
