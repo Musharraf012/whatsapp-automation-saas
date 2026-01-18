@@ -1,4 +1,5 @@
 import axios from "axios";
+import { formatNumberForWhatsAppTemplate } from "../utils/helper.js";
 
 /**
  * Sends a WhatsApp template message.
@@ -15,6 +16,7 @@ export const sendTemplateMessage = async (
 ) => {
     const finalPhoneId = phoneNumberId || process.env.META_WA_PHONE_NUMBER_ID;
     const finalToken = accessToken || process.env.META_WA_ACCESS_TOKEN;
+    const formattedTo = formatNumberForWhatsAppTemplate(to);
 
     const url = `https://graph.facebook.com/v22.0/${finalPhoneId}/messages`;
 
@@ -32,7 +34,7 @@ export const sendTemplateMessage = async (
 
     const data = {
         messaging_product: "whatsapp",
-        to,
+        to: formattedTo,
         type: "template",
         template: {
             name: templateName,

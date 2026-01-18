@@ -48,7 +48,7 @@ const app = express();
 app.use(cors({
     origin: "*",   // Later you can restrict to frontend domain
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-    allowedHeaders: ["Content-Type", "Authorization"]
+    allowedHeaders: ["Content-Type", "Authorization", "ngrok-skip-browser-warning"]
 }));
 
 /**

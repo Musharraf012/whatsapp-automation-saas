@@ -56,7 +56,7 @@ const purchaseSchema = new mongoose.Schema(
         // Which service we are waiting for in the current month
         monthlyFlowStep: {
             type: String,
-            enum: ["e_cleaning", "filter", "deep_clean", "done"],
+            enum: ["e_cleaning", "filter", "deep_clean", "remark", "done"],
             default: "e_cleaning"
         },
 

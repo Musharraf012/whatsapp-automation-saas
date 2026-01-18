@@ -16,7 +16,7 @@ const whatsappMessageSchema = new mongoose.Schema(
 
         serviceType: {
             type: String,
-            enum: ["e_cleaning", "filter", "deep_clean"],
+            enum: ["e_cleaning", "filter", "deep_clean", "remark"],
             required: true
         },
 
