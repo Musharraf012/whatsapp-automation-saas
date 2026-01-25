@@ -10,26 +10,46 @@ import mongoose from "mongoose";
  */
 export const createPurchase = async (req, res, next) => {
     try {
-        const { productId, customerName, phone, salesDate } = req.body;
+        const { productIds, customerName, phone, salesDate } = req.body;
 
-        if (!productId || !customerName || !phone || !salesDate) {
-            throw new ApiError(400, "All fields are required");
+        if (!productIds || !Array.isArray(productIds) || productIds.length === 0 || !customerName || !phone || !salesDate) {
+            throw new ApiError(400, "All fields are required and at least one product must be selected");
         }
 
-        const product = await Product.findOne({
-            _id: productId,
+        // Validate phone number format (must be exactly 10 digits)
+        const cleanPhone = phone.replace(/\D/g, '');
+        if (cleanPhone.length !== 10) {
+            throw new ApiError(400, "Phone number must be exactly 10 digits");
+        }
+
+        // Check if phone number already exists for this user
+        const existingPurchase = await Purchase.findOne({
+            userId: req.user._id,
+            phone: phone
+        });
+
+        if (existingPurchase) {
+            throw new ApiError(400, "A purchase with this phone number already exists");
+        }
+
+        // Validate all products exist and belong to the user
+        const products = await Product.find({
+            _id: { $in: productIds },
             userId: req.user._id
         });
 
-        if (!product) {
-            throw new ApiError(404, "Product not found");
+        if (products.length !== productIds.length) {
+            throw new ApiError(404, "One or more products not found");
         }
 
         const saleDate = new Date(salesDate);
 
+        // Use the first product's settings for service dates
+        const firstProduct = products[0];
+
         const purchase = await Purchase.create({
             userId: req.user._id,
-            productId,
+            productIds,
             customerName,
             phone,
             salesDate: saleDate,
@@ -38,9 +58,9 @@ export const createPurchase = async (req, res, next) => {
             lastFilterCheck: null,
             lastDeepCleaning: null,
 
-            nextECleaning: addDays(saleDate, product.eCleaningDays),
-            nextFilterCheck: addDays(saleDate, product.filterDays),
-            nextDeepCleaning: addDays(saleDate, product.deepCleanDays)
+            nextECleaning: addDays(saleDate, firstProduct.eCleaningDays),
+            nextFilterCheck: addDays(saleDate, firstProduct.filterDays),
+            nextDeepCleaning: addDays(saleDate, firstProduct.deepCleanDays)
         });
 
         res.status(201).json(
@@ -73,12 +93,28 @@ export const getPurchases = async (req, res, next) => {
             {
                 $lookup: {
                     from: "products",
-                    localField: "productId",
+                    localField: "productIds",
                     foreignField: "_id",
-                    as: "product"
+                    as: "products"
                 }
             },
-            { $unwind: "$product" },
+            {
+                $addFields: {
+                    productNames: {
+                        $reduce: {
+                            input: "$products",
+                            initialValue: "",
+                            in: {
+                                $concat: [
+                                    "$$value",
+                                    { $cond: [{ $eq: ["$$value", ""] }, "", ", "] },
+                                    "$$this.name"
+                                ]
+                            }
+                        }
+                    }
+                }
+            },
             {
                 $project: {
                     customerName: 1,
@@ -88,7 +124,7 @@ export const getPurchases = async (req, res, next) => {
                     nextFilterCheck: 1,
                     nextDeepCleaning: 1,
                     status: 1,
-                    "product.name": 1
+                    productNames: 1
                 }
             }
         ];
@@ -137,16 +173,32 @@ export const getPurchaseTable = async (req, res, next) => {
                 }
             },
 
-            // 🔹 Join Product
+            // 🔹 Join Products
             {
                 $lookup: {
                     from: "products",
-                    localField: "productId",
+                    localField: "productIds",
                     foreignField: "_id",
-                    as: "product"
+                    as: "products"
                 }
             },
-            { $unwind: "$product" },
+            {
+                $addFields: {
+                    productName: {
+                        $reduce: {
+                            input: "$products",
+                            initialValue: "",
+                            in: {
+                                $concat: [
+                                    "$$value",
+                                    { $cond: [{ $eq: ["$$value", ""] }, "", ", "] },
+                                    "$$this.name"
+                                ]
+                            }
+                        }
+                    }
+                }
+            },
 
             // 🔹 Join WhatsApp messages
             {
@@ -164,7 +216,7 @@ export const getPurchaseTable = async (req, res, next) => {
                     salesDate: 1,
                     customerName: 1,
                     phone: 1,
-                    productName: "$product.name",
+                    productName: 1,
 
                     eCleaning: {
                         $let: {
@@ -322,7 +374,7 @@ export const getPurchaseById = async (req, res, next) => {
         const purchase = await Purchase.findOne({
             _id: req.params.id,
             userId: req.user._id
-        }).populate("productId", "name");
+        }).populate("productIds", "name");
 
         if (!purchase) {
             throw new ApiError(404, "Purchase not found");
@@ -347,6 +399,26 @@ export const updatePurchase = async (req, res, next) => {
         allowedFields.forEach((f) => {
             if (req.body[f] !== undefined) updateData[f] = req.body[f];
         });
+
+        // If phone is being updated, check for uniqueness
+        if (updateData.phone) {
+            // Validate phone number format
+            const cleanPhone = updateData.phone.replace(/\D/g, '');
+            if (cleanPhone.length !== 10) {
+                throw new ApiError(400, "Phone number must be exactly 10 digits");
+            }
+
+            // Check if phone already exists for another purchase
+            const existingPurchase = await Purchase.findOne({
+                userId: req.user._id,
+                phone: updateData.phone,
+                _id: { $ne: req.params.id } // Exclude current purchase
+            });
+
+            if (existingPurchase) {
+                throw new ApiError(400, "A purchase with this phone number already exists");
+            }
+        }
 
         const purchase = await Purchase.findOneAndUpdate(
             { _id: req.params.id, userId: req.user._id },

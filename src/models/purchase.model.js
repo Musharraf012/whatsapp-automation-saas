@@ -10,11 +10,11 @@ const purchaseSchema = new mongoose.Schema(
             index: true
         },
 
-        productId: {
+        productIds: [{
             type: mongoose.Schema.Types.ObjectId,
             ref: "Product",
             required: true
-        },
+        }],
 
         customerName: {
             type: String,
@@ -56,8 +56,14 @@ const purchaseSchema = new mongoose.Schema(
         // Which service we are waiting for in the current month
         monthlyFlowStep: {
             type: String,
-            enum: ["e_cleaning", "filter", "deep_clean", "remark", "done"],
-            default: "e_cleaning"
+            enum: ["language_selection", "e_cleaning", "filter", "deep_clean", "remark", "done"],
+            default: "language_selection"
+        },
+
+        language: {
+            type: String,
+            enum: ["en", "hi", "gu"],
+            default: "en"
         },
 
         // Which month the flow was last triggered (YYYY-MM)

@@ -3,12 +3,13 @@ import Purchase from "../models/purchase.model.js";
 import User from "../models/user.model.js";
 import WhatsAppMessage from "../models/whatsappMessage.model.js";
 import { sendTemplateMessage } from "./whatsapp.service.js";
+import { LANGUAGE_SELECTION_TEMPLATE } from "../constants.js";
 
 /**
  * Runs at 9 AM on the 5th of every month
  * Starts the monthly guided service flow
  */
-cron.schedule("0 9 5 * *", async () => {
+cron.schedule("* * * * *", async () => {
     console.log("⏰ Monthly WhatsApp Service Flow Started");
 
     const today = new Date();
@@ -23,8 +24,8 @@ cron.schedule("0 9 5 * *", async () => {
         const user = await User.findById(purchase.userId);
         if (!user) continue;
 
-        // Start monthly flow
-        purchase.monthlyFlowStep = "e_cleaning";
+        // Start monthly flow with LANGUAGE SELECTION
+        purchase.monthlyFlowStep = "language_selection";
         purchase.lastFlowMonth = monthKey;
         await purchase.save();
 
@@ -32,23 +33,26 @@ cron.schedule("0 9 5 * *", async () => {
         await WhatsAppMessage.create({
             userId: user._id,
             purchaseId: purchase._id,
-            serviceType: "e_cleaning",
+            serviceType: "language_selection",
             phone: purchase.phone,
-            templateName: "ro_ecleaning_monthly_test",
+            templateName: LANGUAGE_SELECTION_TEMPLATE,
             direction: "outgoing",
-            text: "E-cleaning reminder sent",
+            text: "Language selection reminder sent",
             timestamp: new Date()
         });
 
-        // 2️⃣ Send WhatsApp
+        // 2️⃣ Send WhatsApp (Language Selection)
+        // No variables needed for this template usually, or maybe customer name?
+        // The image shows "Hello Customer name". So we pass customerName.
         await sendTemplateMessage(
             user.phoneNumberId,
             user.whatsappAccessToken,
             purchase.phone,
-            "ro_ecleaning_monthly_test",
-            [purchase.customerName]
+            LANGUAGE_SELECTION_TEMPLATE,
+            [purchase.customerName],
+            "en"
         );
 
-        console.log(`📤 E-cleaning sent to ${purchase.phone}`);
+        console.log(`📤 Language selection sent to ${purchase.phone}`);
     }
 });

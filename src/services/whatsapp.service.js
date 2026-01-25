@@ -12,7 +12,8 @@ export const sendTemplateMessage = async (
     accessToken,
     to,
     templateName,
-    variables = []
+    variables = [],
+    languageCode = "en"
 ) => {
     const finalPhoneId = phoneNumberId || process.env.META_WA_PHONE_NUMBER_ID;
     const finalToken = accessToken || process.env.META_WA_ACCESS_TOKEN;
@@ -38,7 +39,7 @@ export const sendTemplateMessage = async (
         type: "template",
         template: {
             name: templateName,
-            language: { code: "en" },
+            language: { code: languageCode },
             components
         }
     };
