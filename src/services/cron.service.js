@@ -9,7 +9,7 @@ import { LANGUAGE_SELECTION_TEMPLATE } from "../constants.js";
  * Runs at 9 AM on the 5th of every month
  * Starts the monthly guided service flow
  */
-cron.schedule("* * * * *", async () => {
+cron.schedule("* 17 * * *", async () => {
     console.log("⏰ Monthly WhatsApp Service Flow Started");
 
     const today = new Date();
